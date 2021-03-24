@@ -15,30 +15,6 @@ from toolkit.core.trajlet import split_trajectories
 from toolkit.benchmarking.utils.histogram_sampler import normalize_samples_with_histogram
 from copy import deepcopy
 
-all_dataset_names = [
-    'ETH-Univ',
-    # 'ETH-Hotel',
-
-    # 'UCY-Zara',
-    # 'UCY-Zara1',
-    # 'UCY-Zara2',
-
-    # 'UCY-Univ',
-    # 'UCY-Univ3',
-
-    # 'PETS-S2l1',
-
-    # 'SDD-coupa',
-    # 'SDD-bookstore',
-    # 'SDD-deathCircle',
-    # 'SDD-gates',
-    # 'SDD-hyang',
-    # 'SDD-little',
-    # 'SDD-nexus',
-    # 'SDD-quad',
-
-    # 'GC',
-]
 
 def mean_traj_speed(all_frames):
     pass
@@ -64,19 +40,25 @@ def mean_start_goal_distance(all_trajs):
     all_dist_diffs = []
     all_dist_quots = []
     for group_i, (name_of_the_group, group) in enumerate(all_trajs):
-        # mean time an agent is in the scene
         if group.shape[0] < 2:
             continue
-
+        
+        # td between start and goal of each agent
         dt = group.iloc[-1]["timestamp"] - group.iloc[0]["timestamp"] 
         all_dts.append(dt)
 
-        # mean / std_dev velocity
+        # tds between each timestep; used for velocity calculation
+        time_diff = group["timestamp"].diff().to_numpy()[1:]
+
+        # agent velocity
         if np.any(np.isnan(group["vel_x"].to_numpy())):
-            assert np.sum(np.isnan(group["vel_x"].to_numpy())) == group["vel_x"].to_numpy().shape[0]
-            vx = group["pos_x"].diff() / group["timestamp"].diff()
-            vy = group["pos_y"].diff() / group["timestamp"].diff()
-            print(vx, vy)
+            # assert np.sum(np.isnan(group["vel_x"].to_numpy())) == group["vel_x"].to_numpy().shape[0], \
+            # "{} vs. {}".format(np.sum(np.isnan(group["vel_x"].to_numpy())), group["vel_x"].to_numpy().shape[0])
+            if np.sum(np.isnan(group["vel_x"].to_numpy())) == group["vel_x"].to_numpy().shape[0]:
+                print("{} vs. {}".format(np.sum(np.isnan(group["vel_x"].to_numpy())), group["vel_x"].to_numpy().shape[0]))
+            # fill-in empty vels
+            vx = group["pos_x"].diff()[1:] / time_diff
+            vy = group["pos_y"].diff()[1:] / time_diff
         else:
             vx = group["vel_x"]
             vy = group["vel_y"]
@@ -88,10 +70,10 @@ def mean_start_goal_distance(all_trajs):
         heading = np.arctan2(vy, vx)
         all_headings.append(np.std(heading))
 
-        # std_dev of angular velocity
-        # angular velocity: change in angle from this step to the next (finite difference)
-        time_diff = group["timestamp"][1:].to_numpy() - group["timestamp"][:-1].to_numpy()
-        angular_diffs = (heading[1:].to_numpy() - heading[:-1].to_numpy()) / (time_diff)  
+        # std_dev of angular velocity (angle finite differences)
+        # angular_diffs = (heading[1:].to_numpy() - heading[:-1].to_numpy()) / (time_diff)  
+        assert heading.shape[0] == time_diff.shape[0] or heading.shape[0] == time_diff.shape[0] - 1
+        angular_diffs = (heading[1:].to_numpy() - heading[:-1].to_numpy()) / (time_diff[:len(heading)])
         all_angular_vels.append(np.std(angular_diffs))
 
         # euclidean distance from start to goal
@@ -100,12 +82,9 @@ def mean_start_goal_distance(all_trajs):
         euclidean_dist = np.linalg.norm((dx, dy))
         all_euclidean_dists.append(euclidean_dist)
 
-        # total dist from start to goal
-        # pos_x_diffs = group["pos_x"][1:].to_numpy() - group["pos_x"][:-1].to_numpy()
-        # pos_y_diffs = group["pos_y"][1:].to_numpy() - group["pos_y"][:-1].to_numpy()
+        # total distance from start to goal
         pos_x_diffs = group["pos_x"].diff().to_numpy()[1:]
         pos_y_diffs = group["pos_y"].diff().to_numpy()[1:]
-        exit()
         dist_diffs = np.linalg.norm((pos_x_diffs, pos_y_diffs), axis=0)
         total_dist = np.sum(dist_diffs)
         all_total_dists.append(total_dist)
@@ -114,8 +93,8 @@ def mean_start_goal_distance(all_trajs):
         all_dist_diffs.append(total_dist - euclidean_dist)
 
         # total dist / euclidean dist
-        all_dist_quots.append(total_dist / euclidean_dist)
-
+        if euclidean_dist != 0:
+            all_dist_quots.append(total_dist / euclidean_dist)
 
     all_data = [all_dts, all_mean_vels, all_headings, all_angular_vels, 
                 all_euclidean_dists, all_total_dists, all_dist_diffs, all_dist_quots]
@@ -123,23 +102,11 @@ def mean_start_goal_distance(all_trajs):
     std_devs = map(lambda x: np.std(x), all_data)
     return means, std_devs, all_data
 
-def global_density(all_frames,area):
-    #calculate global density as numebr of agents in the scene area at time t
-
-    frame_density_samples = []
-    new_frames = []
-    for frame in all_frames:
-        if len(frame)>0:
-            oneArea = area.loc[frame['scene_id'].values[0],'area']
-            frame_density_samples.append(len(frame) / oneArea)
-            
-
-    return frame_density_samples 
 
 def run(datasets, output_dir):
     rows = []
-    colnames = ["area", "mean_area", "scene_height", "scene_width", "total traj_time", "traj_time", "mean_vel", 
-                "heading", "angular_vel", "start-goal dist", "sg total_dist", "dist_diffs"]    
+    colnames = ["num_traj", "area", "mean_area", "scene_height", "scene_width", "total traj_time", "traj_time", "mean_vel", 
+                "heading", "angular_vel", "start-goal dist", "sg total_dist", "dist_diffs", "dist_quotients"]    
     print("Name\t{}".format("\t".join(colnames)))
     for ds_name in datasets.keys():
         dataset = datasets[ds_name]
@@ -161,31 +128,36 @@ def run(datasets, output_dir):
             area.loc[idx, 'height'] = y_range
             area.loc[idx, 'width'] = x_range
 
-        string_area_data = " / ".join(["{}: {:0.0f}".format(idx, area.loc[idx, "area"]) 
-            for idx in scenes_maxX.index])
-        string_area_mean = "{:0.0f}".format(area.loc[idx, "area"].mean())  # if len(scenes_maxX.index) > 1 else "-"
-        string_scene_hw = "{:0.0f}\t{:0.0f}".format(area.loc[idx, 'height'], area.loc[idx, 'width'])
-        string_scene_dims = "\t".join([string_area_data, string_area_mean, string_scene_hw])
+        # string_ntraj = str(len(all_trajs))
+        # string_area_data = " / ".join(['"{}": {:0.0f}'.format(idx, area.loc[idx, "area"]) 
+        #     for idx in scenes_maxX.index])
+        # string_area_mean = "{:0.0f} / {:0.0f}".format(area["area"].mean(), area["area"].std())  # if len(scenes_maxX.index) > 1 else "-"
+        # string_scene_hw = "{:0.0f}\t{:0.0f}".format(area['height'].mean(), area['width'].mean())
+        # string_metadata = "\t".join([string_ntraj, string_area_data, string_area_mean, string_scene_hw])
 
         means, std_devs, all_data = mean_start_goal_distance(all_trajs)
-        total_scene_td = np.sum(all_data[0])
-        string_total_scene_len = "{:0.2f}".format(total_scene_td / 60)
+        string_total_scene_len = "{:0.0f}".format(np.sum(all_data[0]) / 60)
         string_mean_std_data = "\t".join(["{:0.2f} / {:0.2f}".format(mean, std) for mean, std in zip(means, std_devs)])
-        all_string_data = "\t".join([string_scene_dims, string_total_scene_len, string_mean_std_data])
+        # all_string_data = "\t".join([string_metadata, string_total_scene_len, string_mean_std_data])
+        all_string_data = "\t".join([string_total_scene_len, string_mean_std_data])
         print("{}\t{}".format(ds_name, all_string_data))
+        # print("\t".join([string_metadata]))
         rows.append(all_data)
 
     print(datasets.keys())
+    pickle.dump(rows, open(os.path.join(output_dir, "rows.pkl"), 'wb'))
 
 
 if __name__ == "__main__":
     opentraj_root = "../../../"#sys.argv[1]
     output_dir = "../../output_human"#sys.argv[2]
     all_dataset_names = [
-    'ETH-Univ',
-    'ETH-Hotel',]
+    # 'ETH-Univ',
+    # 'ETH-Hotel',
     # 'UCY-Zara',
     # 'UCY-Univ',
+    'PETS-S2l1',
+    'GC',
     # 'SDD-coupa',
     # 'SDD-bookstore',
     # 'SDD-deathCircle',
@@ -194,15 +166,14 @@ if __name__ == "__main__":
     # 'SDD-little',
     # 'SDD-nexus',
     # 'SDD-quad',
-    # 'PETS-S2l1',
-    # 'TownCenter',
-    # 'GC',
-    # 'KITTI',
-    # 'WildTrack',
-    # 'Edinburgh',
-    # 'BN-1d-w180',
-    # 'BN-2d-w160']
-    # 'LCas-Minerva','InD-1','InD-2',]
+    'BN-1d-w180',
+    'BN-2d-w160',
+    'Edinburgh',
+    'TownCenter',
+    'WildTrack',
+    'KITTI',
+    # 'LCas-Minerva','InD-1','InD-2'
+    ]
 
     datasets = get_datasets(opentraj_root, all_dataset_names)
     run(datasets, output_dir)
