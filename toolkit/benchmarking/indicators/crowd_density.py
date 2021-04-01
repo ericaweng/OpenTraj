@@ -82,7 +82,7 @@ def global_density(all_frames,area):
 
 
 def run(datasets, output_dir):
-    all_names = ['ETH-Univ','ETH-Hotel','UCY-Zara','UCY-Univ','SDD-Coupa','SDD-bookstore','SDD-deathCircle','GC','InD-1','InD-2','KITTI','LCas-Minerva','WildTrack','Edinburgh','BN-1d-w180','BN-2d-w160']
+    all_names = ['ETH-Univ']#,'ETH-Hotel','UCY-Zara','UCY-Univ','SDD-Coupa','SDD-bookstore','SDD-deathCircle',]#'GC','InD-1','InD-2','KITTI','LCas-Minerva','WildTrack','Edinburgh','BN-1d-w180','BN-2d-w160']
 
     #list(datasets.keys())
 
@@ -96,77 +96,81 @@ def run(datasets, output_dir):
         all_frames = dataset.get_frames()
         all_trajs = dataset.get_trajectories()
 
-        trajlets = {}
-
         #get scene area
-        scenes_maxX =  dataset.data.groupby(['scene_id'])['pos_x'].max() 
-        scenes_minX =  dataset.data.groupby(['scene_id'])['pos_x'].min()
-        scenes_maxY =  dataset.data.groupby(['scene_id'])['pos_y'].max()
-        scenes_minY =  dataset.data.groupby(['scene_id'])['pos_y'].min()
+        scenes_maxX = dataset.data.groupby(['scene_id'])['pos_x'].max() 
+        scenes_minX = dataset.data.groupby(['scene_id'])['pos_x'].min()
+        scenes_maxY = dataset.data.groupby(['scene_id'])['pos_y'].max()
+        scenes_minY = dataset.data.groupby(['scene_id'])['pos_y'].min()
 
-
-        area=pd.DataFrame(data=[],columns=['scene_id','area'])
+        area = pd.DataFrame(data=[],columns=['scene_id','area'])
         for idx in scenes_maxX.index:
             x_range = scenes_maxX.loc[idx]-scenes_minX.loc[idx]
             y_range = scenes_maxY.loc[idx]-scenes_minY.loc[idx]
             area.loc[idx,'area'] = x_range*y_range
-            
 
         #calculate and store global density
-
-        global_dens = global_density(all_frames,area)
-        g_density = pd.DataFrame(data=np.zeros((len(global_dens),2)),columns=['ds_name','global_density'])
-        g_density.iloc[:,0] = [ds_name for i in range(len(global_dens))]
-        g_density.iloc[:,1] = global_dens
-
-        all_global_density.append(global_dens)
         outputFile1 = output_dir+"/"+ds_name+'_globalDens.h5'
-        fw = open(outputFile1, 'wb')
-        pickle.dump(g_density, fw)
-        fw.close()
+        if os.path.exists(outputFile1):
+            with open(outputFile1, 'rb') as f:
+                global_dens = pickle.load(f).iloc[:,1]
+                all_global_density.append(global_dens)
+        else:
+            global_dens = global_density(all_frames,area)
+            g_density = pd.DataFrame(data=np.zeros((len(global_dens),2)),columns=['ds_name','global_density'])
+            g_density.iloc[:,0] = [ds_name for i in range(len(global_dens))]
+            g_density.iloc[:,1] = global_dens
+
+            all_global_density.append(global_dens)
+            outputFile1 = output_dir+"/"+ds_name+'_globalDens.h5'
+            fw = open(outputFile1, 'wb')
+            pickle.dump(g_density, fw)
+            fw.close()
 
         #calculate and store local density
-
-        trajlets = {}
-        local_dens = local_density(all_frames,trajlets,ds_name)
-        l_density = pd.DataFrame(data=[],columns=['ds_name','local_density'])
-
-        l_density.iloc[:,1] = local_dens 
-        l_density.iloc[:,0] = [ds_name for i in range(len(l_density.iloc[:,1]))]
-        all_local_density.append(local_dens) 
         outputFile2 = output_dir+"/"+ds_name+'_localDens.h5'
-        fw = open(outputFile2, 'wb')
-        pickle.dump(l_density, fw)
-        fw.close()
+        if os.path.exists(outputFile2):
+            with open(outputFile2, 'rb') as f:
+                local_dens = pickle.load(f).iloc[:,1]
+                all_local_density.append(local_dens)
+        else: 
+            trajlets = {}
+            local_dens = local_density(all_frames,trajlets,ds_name)
+            l_density = pd.DataFrame(data=[],columns=['ds_name','local_density'])
 
+            l_density.iloc[:,1] = local_dens 
+            l_density.iloc[:,0] = [ds_name for i in range(len(l_density.iloc[:,1]))]
+            all_local_density.append(local_dens) 
+            outputFile2 = output_dir+"/"+ds_name+'_localDens.h5'
+            fw = open(outputFile2, 'wb')
+            pickle.dump(l_density, fw)
+            fw.close()
 
         print(ds_name," finish")
    
        
     # down-sample each group.
-    # down-sample each group.
-    gdens_d = normalize_samples_with_histogram(all_global_density[:-2], max_n_samples=800, n_bins=50,quantile_interval=[0.05, 0.98])
-    ldens_d = normalize_samples_with_histogram(all_local_density[:-2],max_n_samples=800, n_bins=50,quantile_interval=[0.05, 0.95])
-    BNgdens_d = normalize_samples_with_histogram(all_global_density[-2:], max_n_samples=800, n_bins=50,quantile_interval=[0.05, 0.98])
-    BNldens_d = normalize_samples_with_histogram(all_local_density[-2:],max_n_samples=800, n_bins=50,quantile_interval=[0.05, 0.95])
+    gdens_d = normalize_samples_with_histogram(all_global_density[:], max_n_samples=800, n_bins=50,quantile_interval=[0.05, 0.98])
+    ldens_d = normalize_samples_with_histogram(all_local_density[:],max_n_samples=800, n_bins=50,quantile_interval=[0.05, 0.95])
+    # BNgdens_d = normalize_samples_with_histogram(all_global_density[-2:], max_n_samples=800, n_bins=50,quantile_interval=[0.05, 0.98])
+    # BNldens_d = normalize_samples_with_histogram(all_local_density[-2:],max_n_samples=800, n_bins=50,quantile_interval=[0.05, 0.95])
 
 
     # put samples in a DataFrame (required for seaborn plots)
     df_gdens = pd.concat([pd.DataFrame({'title': all_names[ii],
                                             'global_density': gdens_d[ii],
-                                            }) for ii in range(len(all_names[:-2]))])
+                                            }) for ii in range(len(all_names[:]))])
 
     df_ldens = pd.concat([pd.DataFrame({'title': all_names[ii],
                                             'local_density': ldens_d[ii],
-                                            }) for ii in range(len(all_names[:-2]))])
+                                            }) for ii in range(len(all_names[:]))])
 
-    BN_gdens = pd.concat([pd.DataFrame({'title': all_names[-ii-1],
-                                            'global_density': BNgdens_d[ii],
-                                            }) for ii in range(2)])
+    # BN_gdens = pd.concat([pd.DataFrame({'title': all_names[-ii-1],
+    #                                         'global_density': BNgdens_d[ii],
+    #                                         }) for ii in range(2)])
 
-    BN_ldens = pd.concat([pd.DataFrame({'title': all_names[-ii-1],
-                                            'local_density': BNldens_d[ii],
-                                            }) for ii in range(2)])
+    # BN_ldens = pd.concat([pd.DataFrame({'title': all_names[-ii-1],
+    #                                         'local_density': BNldens_d[ii],
+    #                                         }) for ii in range(2)])
 
     print("making plots ...")
 
@@ -192,20 +196,20 @@ def run(datasets, output_dir):
     axs[1,0].yaxis.set_tick_params(labelsize=8)
 
 
-    sns.swarmplot(y='global_density', x='title', data=BN_gdens, size=1,ax=axs[0,1])
-    axs[0,1].set_ylim([0, 1.5])
-    axs[0,1].set_yticks([0, 0.5,1,1.5])
-    axs[0,1].set_xlabel('')
-    axs[0,1].set_ylabel('')
-    axs[0,1].yaxis.set_tick_params(labelsize=8)
+    # sns.swarmplot(y='global_density', x='title', data=BN_gdens, size=1,ax=axs[0,1])
+    # axs[0,1].set_ylim([0, 1.5])
+    # axs[0,1].set_yticks([0, 0.5,1,1.5])
+    # axs[0,1].set_xlabel('')
+    # axs[0,1].set_ylabel('')
+    # axs[0,1].yaxis.set_tick_params(labelsize=8)
 
 
-    sns.swarmplot(y='local_density', x='title', data=BN_ldens, size=1,ax=axs[1,1])
-    axs[1,1].set_ylim([0, 6])
-    axs[1,1].set_yticks([0, 2,4,6])
-    axs[1,1].set_xlabel('')
-    axs[1,1].set_ylabel('')
-    axs[1,1].yaxis.set_tick_params(labelsize=8)
+    # sns.swarmplot(y='local_density', x='title', data=BN_ldens, size=1,ax=axs[1,1])
+    # axs[1,1].set_ylim([0, 6])
+    # axs[1,1].set_yticks([0, 2,4,6])
+    # axs[1,1].set_xlabel('')
+    # axs[1,1].set_ylabel('')
+    # axs[1,1].yaxis.set_tick_params(labelsize=8)
 
 
     axs[1,1].xaxis.set_tick_params(labelsize=8)
@@ -221,8 +225,9 @@ def run(datasets, output_dir):
         
 
 if __name__ == "__main__":
-    opentraj_root = sys.argv[1]
-    output_dir = sys.argv[2]
+    opentraj_root = "../../../"#sys.argv[1]
+    output_dir = "output"#sys.argv[2]
+    all_dataset_names = ['ETH-Univ']
     datasets = get_datasets(opentraj_root, all_dataset_names)
 
     run(datasets, output_dir)

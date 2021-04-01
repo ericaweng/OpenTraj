@@ -46,10 +46,10 @@ all_dataset_names = [
     # 'SDD-nexus',
     # 'SDD-quad',
 
-    # 'GC',
+    'GC',
 
-    'InD-1',  # location_id = 1
-    'InD-2',  # location_id = 2
+    # 'InD-1',  # location_id = 1
+    # 'InD-2',  # location_id = 2
     # 'InD-3',  # location_id = 3
     # 'InD-4',  # location_id = 4
 
@@ -67,7 +67,7 @@ all_dataset_names = [
     'BN-2d-w160',
 
 
-    # 'TownCenter',
+    'TownCenter',
 ]
 
 
@@ -292,7 +292,9 @@ def get_datasets(opentraj_root, dataset_names):
                                                      use_kalman=True, scene_id=selected_day,
                                                      sampling_rate=4)  # original_framerate=9
                                       )
-                merge_datasets(partial_ds)
+                # Erica addition: save each selected day
+                datasets[dataset_name] = merge_datasets(partial_ds)
+                datasets[dataset_name].data.to_pickle(dataset_h5_file)
 
             else:
                 seq_date = dataset_name.split('-')[1]
@@ -318,6 +320,9 @@ def get_datasets(opentraj_root, dataset_names):
             scene_name = dataset_name.split('-')[1]
             sdd_root = os.path.join(opentraj_root, 'datasets', 'SDD')
             annot_files_sdd = sorted(glob.glob(sdd_root + '/' + scene_name + "/**/annotations.txt", recursive=True))
+            
+            if len(annot_files_sdd) == 0:
+                raise RuntimeError("no SDD files found with name", scene_name)
 
             sdd_scales_yaml_file = os.path.join(sdd_root, 'estimated_scales.yaml')
             with open(sdd_scales_yaml_file, 'r') as f:

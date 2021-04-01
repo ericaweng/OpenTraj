@@ -40,8 +40,9 @@ def load_edinburgh(path, **kwargs):
         files_list = sorted(glob.glob(path + "/*.txt"))
     elif os.path.exists(path):
         files_list = [path]
+        print("Edinburgh files_list:", files_list)
     else:
-        raise ValueError("loadEdinburgh: input file is invalid")
+        raise ValueError("loadEdinburgh: input file is invalid: path ({})".format(path))
 
     csv_columns = ['centre_x','centre_y','frame','agent_id','length'] 
 

@@ -52,13 +52,12 @@ def mean_start_goal_distance(all_trajs):
 
         # agent velocity
         if np.any(np.isnan(group["vel_x"].to_numpy())):
-            # assert np.sum(np.isnan(group["vel_x"].to_numpy())) == group["vel_x"].to_numpy().shape[0], \
-            # "{} vs. {}".format(np.sum(np.isnan(group["vel_x"].to_numpy())), group["vel_x"].to_numpy().shape[0])
-            if np.sum(np.isnan(group["vel_x"].to_numpy())) == group["vel_x"].to_numpy().shape[0]:
-                print("{} vs. {}".format(np.sum(np.isnan(group["vel_x"].to_numpy())), group["vel_x"].to_numpy().shape[0]))
+            if group["vel_x"].isnull().sum() == group["vel_x"].shape[0]:
+                print("{} vs. {}\n\n".format(group["vel_x"].isnull().sum(), group["vel_x"].shape[0]))
             # fill-in empty vels
             vx = group["pos_x"].diff()[1:] / time_diff
             vy = group["pos_y"].diff()[1:] / time_diff
+            nan_idxs = np.isnan(group["vel_x"].to_numpy())
         else:
             vx = group["vel_x"]
             vy = group["vel_y"]
@@ -71,9 +70,8 @@ def mean_start_goal_distance(all_trajs):
         all_headings.append(np.std(heading))
 
         # std_dev of angular velocity (angle finite differences)
-        # angular_diffs = (heading[1:].to_numpy() - heading[:-1].to_numpy()) / (time_diff)  
-        assert heading.shape[0] == time_diff.shape[0] or heading.shape[0] == time_diff.shape[0] - 1
-        angular_diffs = (heading[1:].to_numpy() - heading[:-1].to_numpy()) / (time_diff[:len(heading)])
+        assert heading.shape[0] == time_diff.shape[0] or heading.shape[0] - 1 == time_diff.shape[0]
+        angular_diffs = heading.diff()[1:] / time_diff[:heading.shape[0] - 1]
         all_angular_vels.append(np.std(angular_diffs))
 
         # euclidean distance from start to goal
@@ -108,6 +106,11 @@ def run(datasets, output_dir):
     colnames = ["num_traj", "area", "mean_area", "scene_height", "scene_width", "total traj_time", "traj_time", "mean_vel", 
                 "heading", "angular_vel", "start-goal dist", "sg total_dist", "dist_diffs", "dist_quotients"]    
     print("Name\t{}".format("\t".join(colnames)))
+
+    print_string = ""
+
+    with open("../../../rows.tsv", 'w') as f:
+        f.write(print_string)
     for ds_name in datasets.keys():
         dataset = datasets[ds_name]
 
@@ -128,25 +131,24 @@ def run(datasets, output_dir):
             area.loc[idx, 'height'] = y_range
             area.loc[idx, 'width'] = x_range
 
-        # string_ntraj = str(len(all_trajs))
-        # string_area_data = " / ".join(['"{}": {:0.0f}'.format(idx, area.loc[idx, "area"]) 
-        #     for idx in scenes_maxX.index])
-        # string_area_mean = "{:0.0f} / {:0.0f}".format(area["area"].mean(), area["area"].std())  # if len(scenes_maxX.index) > 1 else "-"
-        # string_scene_hw = "{:0.0f}\t{:0.0f}".format(area['height'].mean(), area['width'].mean())
-        # string_metadata = "\t".join([string_ntraj, string_area_data, string_area_mean, string_scene_hw])
+        string_ntraj = str(len(all_trajs))
+        string_area_data = " / ".join(['"{}": {:0.0f}'.format(idx, area.loc[idx, "area"]) 
+            for idx in scenes_maxX.index])
+        string_area_mean = "{:0.0f} / {:0.0f}".format(area["area"].mean(), area["area"].std())  # if len(scenes_maxX.index) > 1 else "-"
+        string_scene_hw = "{:0.0f}\t{:0.0f}".format(area['height'].mean(), area['width'].mean())
+        string_metadata = "\t".join([string_ntraj, string_area_data, string_area_mean, string_scene_hw])
 
         means, std_devs, all_data = mean_start_goal_distance(all_trajs)
         string_total_scene_len = "{:0.0f}".format(np.sum(all_data[0]) / 60)
         string_mean_std_data = "\t".join(["{:0.2f} / {:0.2f}".format(mean, std) for mean, std in zip(means, std_devs)])
-        # all_string_data = "\t".join([string_metadata, string_total_scene_len, string_mean_std_data])
-        all_string_data = "\t".join([string_total_scene_len, string_mean_std_data])
-        print("{}\t{}".format(ds_name, all_string_data))
-        # print("\t".join([string_metadata]))
+        all_string_data = "\t".join([string_metadata, string_total_scene_len, string_mean_std_data])
+        print_string += "{}\t{}\n".format(ds_name, all_string_data)
         rows.append(all_data)
 
+    with open("../../../rows.tsv", 'w') as f:
+        f.write(print_string)
     print(datasets.keys())
-    pickle.dump(rows, open(os.path.join(output_dir, "rows.pkl"), 'wb'))
-
+    # pickle.dump(rows, open(os.path.join(output_dir, "rows.pkl"), 'wb'))
 
 if __name__ == "__main__":
     opentraj_root = "../../../"#sys.argv[1]
